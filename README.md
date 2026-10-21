@@ -1,19 +1,27 @@
-# 🔒 Sistem Login - Hashing & Salting Dinamis
+🔒 Simulasi Keamanan Password - Hashing SHA-256 & Salting
 
-Proyek ini adalah tugas Keamanan Siber yang mengimplementasikan sistem autentikasi (login) menggunakan berbagai metode pengamanan password, mulai dari plaintext, hash murni, hingga kombinasi *Salt* dinamis per user.
+Proyek ini adalah aplikasi simulasi Keamanan Siber yang mengimplementasikan sistem registrasi dan autentikasi (login) menggunakan algoritma kriptografi SHA-256 dengan perbandingan 4 metode penyimpanan password:
 
----
+Plaintext (Password biasa tanpa enkripsi/hash)
 
-## 🛠️ Prasyarat & Instalasi Database (Wajib)
+Hash Saja (SHA256(password))
 
-Sebelum menjalankan aplikasi di XAMPP, **Anda wajib membuat database terlebih dahulu**. Ikuti langkah-langkah berikut:
+Password + Hash (SHA256(password + SHA256(password)))
 
-1. Buka **XAMPP Control Panel** dan pastikan modul **Apache** dan **MySQL** sudah berjalan (*Start*).
-2. Buka browser dan akses **[http://localhost/phpmyadmin](http://localhost/phpmyadmin)**.
-3. Masuk ke menu **SQL**.
-4. *Copy* (salin) dan *paste* (tempel) query SQL di bawah ini, lalu klik **Go**:
+Password + Salting (SHA256(password + salt)) — digunakan untuk verifikasi login
 
-```sql
+📁 Struktur File
+
+index.php — Logika backend PHP (koneksi PDO MySQL, manajemen Session PRG/Flash, perhitungan hash SHA-256) dan struktur tampilan HTML.
+
+style.css — File stylesheet terpisah untuk seluruh tata letak halaman, komponen form, tombol lihat/sembunyikan password, dan tabel responsif.
+
+README.md — Dokumentasi instalasi dan penggunaan aplikasi.
+
+🛠️ Prasyarat & Instalasi Database
+
+Aplikasi ini secara otomatis membuat database kss_login dan tabel users saat pertama kali dijalankan. Namun, jika Anda ingin membuatnya secara manual melalui phpMyAdmin, jalankan query SQL berikut:
+
 -- 1. Membuat Database
 CREATE DATABASE IF NOT EXISTS kss_login
   CHARACTER SET utf8mb4
@@ -33,14 +41,12 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-```
 
-> **Catatan:** Tabel ini sengaja dikosongkan. Semua data *user*, *password*, *hash*, dan *salt* akan terisi secara dinamis saat Anda melakukan registrasi/input melalui halaman web (`index.php`).
 
----
+🚀 Cara Menjalankan Aplikasi
 
-## 🚀 Cara Menjalankan Aplikasi
+Pastikan modul Apache dan MySQL pada XAMPP / Laragon sudah berjalan (Start).
 
-1. Pastikan folder proyek berada di dalam direktori htdocs (`xampp/htdocs/KSS`).
-2. Buka browser Anda.
-3. Akses aplikasi melalui URL: **`http://localhost/KSS/index.php`**
+Simpan file index.php dan style.css di dalam satu folder yang sama pada direktori web server Anda (contoh: xampp/htdocs/KSS/).
+
+Buka browser dan akses URL: http://localhost/KSS/index.php.
