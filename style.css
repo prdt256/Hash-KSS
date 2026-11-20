@@ -460,3 +460,7 @@ code {
 .nowrap {
     white-space: nowrap;
 }
+
+#bagian-perbandingan {
+    scroll-margin-top: 18px;
+}

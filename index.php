@@ -47,8 +47,13 @@ try {
 }
 
 // Helper untuk redirect bersih (Post/Redirect/Get pattern) agar refresh tidak memicu Confirm Form Resubmission
-function redirectClean(): void {
+function redirectClean(string $anchor = ''): void {
     $clean_url = strtok($_SERVER["REQUEST_URI"], '?');
+    $clean_url = '/' . ltrim($clean_url, '/');
+    $safe_anchor = preg_replace('/[^a-zA-Z0-9_-]/', '', $anchor);
+    if ($safe_anchor !== '') {
+        $clean_url .= '#' . $safe_anchor;
+    }
     header("Location: " . $clean_url);
     exit;
 }
@@ -228,7 +233,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['aksi'] ?? '') === 'lihat_d
             'selected_user' => $detail_user
         ];
     }
-    redirectClean();
+    redirectClean('bagian-perbandingan');
 }
 
 if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['aksi'] ?? '') === 'hapus_user' && $koneksi_db) {
@@ -263,7 +268,7 @@ if ($_SERVER["REQUEST_METHOD"] === "GET" && isset($_GET['lihat']) && $koneksi_db
             'selected_user' => $lihat_user
         ];
     }
-    redirectClean();
+    redirectClean('bagian-perbandingan');
 }
 
 // =========================================================
@@ -512,7 +517,7 @@ if ($koneksi_db) {
     <?php endif; ?>
 
     <!-- BAGIAN 3: TABEL PERBANDINGAN 4 METODE PENYIMPANAN PASSWORD -->
-    <div class="card">
+    <div class="card" id="bagian-perbandingan">
         <div class="card-header">
             <span>3. Perbandingan Lengkap 4 Metode Penyimpanan Password <?= $user_terpilih ? '(User: ' . htmlspecialchars($user_terpilih['username']) . ')' : ''; ?></span>
             <?php if ($user_terpilih): ?>
@@ -649,6 +654,18 @@ function togglePassword(inputId, btn) {
         if (label) label.textContent = 'Lihat';
     }
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.location.hash === '#bagian-perbandingan') {
+        var target = document.getElementById('bagian-perbandingan');
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        if (window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname);
+        }
+    }
+});
 </script>
 
 </body>
