@@ -61,86 +61,116 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" && ($_POST['aksi'] ?? '') === 'registr
     $password = $_POST['reg_password'] ?? '';
     $custom_salt = trim($_POST['reg_custom_salt'] ?? '');
 
-    if ($username !== '' && $password !== '') {
-        // 1. Password Biasa (Plaintext)
-        $plaintext = $password;
+    $panjang = static function (string $teks): int {
+        return function_exists('mb_strlen') ? mb_strlen($teks, 'UTF-8') : strlen($teks);
+    };
 
-        // 2. Hash Saja (SHA-256 murni dari password)
-        $hash_only = hash('sha256', $password);
-
-        // 3. Password + Hash (Password digabung dengan hasil Hash Saja, lalu di-hash SHA-256)
-        $gabungan_pass_hash = $password . $hash_only;
-        $pass_plus_hash = hash('sha256', $gabungan_pass_hash);
-
-        // 4. Password + Salting (Gunakan custom salt jika diisi, atau generate acak 16 karakter hex)
-        $salt = ($custom_salt !== '') ? $custom_salt : bin2hex(random_bytes(8));
-        $gabungan_pass_salt = $password . $salt;
-        $salted_hash = hash('sha256', $gabungan_pass_salt);
-
-        // Cek terlebih dahulu apakah username sudah terdaftar agar AUTO_INCREMENT tidak loncat
-        $stmt_cek = $koneksi_db->prepare("SELECT `id` FROM `users` WHERE `username` = :username LIMIT 1");
-        $stmt_cek->execute([':username' => $username]);
-        $existing_user = $stmt_cek->fetch();
-
-        if ($existing_user) {
-            // Update data tanpa memicu penambahan AUTO_INCREMENT
-            $stmt_upd = $koneksi_db->prepare("
-                UPDATE `users`
-                SET `plaintext`      = :plaintext,
-                    `hash_only`      = :hash_only,
-                    `pass_plus_hash` = :pass_plus_hash,
-                    `salt`           = :salt,
-                    `salted_hash`    = :salted_hash
-                WHERE `id` = :id
-            ");
-            $stmt_upd->execute([
-                ':plaintext'      => $plaintext,
-                ':hash_only'      => $hash_only,
-                ':pass_plus_hash' => $pass_plus_hash,
-                ':salt'           => $salt,
-                ':salted_hash'    => $salted_hash,
-                ':id'             => $existing_user['id']
-            ]);
-            $pesan = "Data user <b>" . htmlspecialchars($username) . "</b> sudah ada dan berhasil diperbarui di database MySQL!";
-        } else {
-            // Rapikan nilai AUTO_INCREMENT ke MAX(id) + 1 sebelum insert agar urutan ID tidak loncat
-            $koneksi_db->exec("ALTER TABLE `users` AUTO_INCREMENT = 1");
-
-            $stmt_ins = $koneksi_db->prepare("
-                INSERT INTO `users` (`username`, `plaintext`, `hash_only`, `pass_plus_hash`, `salt`, `salted_hash`)
-                VALUES (:username, :plaintext, :hash_only, :pass_plus_hash, :salt, :salted_hash)
-            ");
-            $stmt_ins->execute([
-                ':username'       => $username,
-                ':plaintext'      => $plaintext,
-                ':hash_only'      => $hash_only,
-                ':pass_plus_hash' => $pass_plus_hash,
-                ':salt'           => $salt,
-                ':salted_hash'    => $salted_hash
-            ]);
-            $pesan = "User baru <b>" . htmlspecialchars($username) . "</b> berhasil diproses dan disimpan ke database MySQL!";
-        }
-
-        // Simpan ke flash session untuk ditampilkan 1x setelah redirect (hilang otomatis jika di-refresh)
+    if ($username === '' || $password === '') {
         $_SESSION['kss_flash'] = [
-            'pesan_aksi'       => $pesan,
-            'tipe_pesan'       => 'ok',
-            'selected_user'    => $username,
-            'hasil_registrasi' => [
-                'username'           => $username,
-                'plaintext'          => $plaintext,
-                'hash_only'          => $hash_only,
-                'gabungan_pass_hash' => $gabungan_pass_hash,
-                'pass_plus_hash'     => $pass_plus_hash,
-                'salt'               => $salt,
-                'jenis_salt'         => ($custom_salt !== '') ? 'Input Manual (Custom)' : 'Acak Otomatis (16 Karakter Hex)',
-                'gabungan_pass_salt' => $gabungan_pass_salt,
-                'salted_hash'        => $salted_hash
-            ]
+            'pesan_aksi'       => "<b>Registrasi Gagal!</b> Username dan password wajib diisi.",
+            'tipe_pesan'       => 'err',
+            'reg_username_old' => $username
         ];
-
         redirectClean();
     }
+
+    if ($panjang($username) > 100) {
+        $_SESSION['kss_flash'] = [
+            'pesan_aksi'       => "<b>Registrasi Gagal!</b> Panjang username maksimal 100 karakter.",
+            'tipe_pesan'       => 'err',
+            'reg_username_old' => $username
+        ];
+        redirectClean();
+    }
+
+    if ($custom_salt !== '' && $panjang($custom_salt) > 64) {
+        $_SESSION['kss_flash'] = [
+            'pesan_aksi'       => "<b>Registrasi Gagal!</b> Panjang Custom Salt maksimal 64 karakter (sesuai kapasitas kolom database).",
+            'tipe_pesan'       => 'err',
+            'reg_username_old' => $username
+        ];
+        redirectClean();
+    }
+
+    // Cek terlebih dahulu apakah username sudah terdaftar (tolak duplikat agar tidak menimpa akun lama)
+    $stmt_cek = $koneksi_db->prepare("SELECT `id` FROM `users` WHERE `username` = :username LIMIT 1");
+    $stmt_cek->execute([':username' => $username]);
+    $existing_user = $stmt_cek->fetch();
+
+    if ($existing_user) {
+        $_SESSION['kss_flash'] = [
+            'pesan_aksi'       => "<b>Registrasi Gagal!</b> Username <b>" . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . "</b> sudah terdaftar di database. Silakan gunakan username lain (data akun yang sudah ada tidak diubah).",
+            'tipe_pesan'       => 'err',
+            'reg_username_old' => $username
+        ];
+        redirectClean();
+    }
+
+    // 1. Password Biasa (Plaintext)
+    $plaintext = $password;
+
+    // 2. Hash Saja (SHA-256 murni dari password)
+    $hash_only = hash('sha256', $password);
+
+    // 3. Password + Hash (Password digabung dengan hasil Hash Saja, lalu di-hash SHA-256)
+    $gabungan_pass_hash = $password . $hash_only;
+    $pass_plus_hash = hash('sha256', $gabungan_pass_hash);
+
+    // 4. Password + Salting (Gunakan custom salt jika diisi, atau generate acak 16 karakter hex)
+    $salt = ($custom_salt !== '') ? $custom_salt : bin2hex(random_bytes(8));
+    $gabungan_pass_salt = $password . $salt;
+    $salted_hash = hash('sha256', $gabungan_pass_salt);
+
+    try {
+        // Rapikan nilai AUTO_INCREMENT ke MAX(id) + 1 sebelum insert agar urutan ID tidak loncat
+        $koneksi_db->exec("ALTER TABLE `users` AUTO_INCREMENT = 1");
+
+        $stmt_ins = $koneksi_db->prepare("
+            INSERT INTO `users` (`username`, `plaintext`, `hash_only`, `pass_plus_hash`, `salt`, `salted_hash`)
+            VALUES (:username, :plaintext, :hash_only, :pass_plus_hash, :salt, :salted_hash)
+        ");
+        $stmt_ins->execute([
+            ':username'       => $username,
+            ':plaintext'      => $plaintext,
+            ':hash_only'      => $hash_only,
+            ':pass_plus_hash' => $pass_plus_hash,
+            ':salt'           => $salt,
+            ':salted_hash'    => $salted_hash
+        ]);
+    } catch (PDOException $e) {
+        // Pengaman tambahan jika terjadi race condition pada constraint UNIQUE username
+        if ($e->getCode() === '23000') {
+            $_SESSION['kss_flash'] = [
+                'pesan_aksi'       => "<b>Registrasi Gagal!</b> Username <b>" . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . "</b> sudah terdaftar di database. Silakan gunakan username lain.",
+                'tipe_pesan'       => 'err',
+                'reg_username_old' => $username
+            ];
+            redirectClean();
+        }
+        throw $e;
+    }
+
+    $pesan = "User baru <b>" . htmlspecialchars($username, ENT_QUOTES, 'UTF-8') . "</b> berhasil diproses dan disimpan ke database MySQL!";
+
+    // Simpan ke flash session untuk ditampilkan 1x setelah redirect (hilang otomatis jika di-refresh)
+    $_SESSION['kss_flash'] = [
+        'pesan_aksi'       => $pesan,
+        'tipe_pesan'       => 'ok',
+        'selected_user'    => $username,
+        'hasil_registrasi' => [
+            'username'           => $username,
+            'plaintext'          => $plaintext,
+            'hash_only'          => $hash_only,
+            'gabungan_pass_hash' => $gabungan_pass_hash,
+            'pass_plus_hash'     => $pass_plus_hash,
+            'salt'               => $salt,
+            'jenis_salt'         => ($custom_salt !== '') ? 'Input Manual (Custom)' : 'Acak Otomatis (16 Karakter Hex)',
+            'gabungan_pass_salt' => $gabungan_pass_salt,
+            'salted_hash'        => $salted_hash
+        ]
+    ];
+
+    redirectClean();
 }
 
 // =========================================================
@@ -244,6 +274,7 @@ unset($_SESSION['kss_flash']);
 
 $pesan_aksi       = $flash['pesan_aksi'] ?? "";
 $tipe_pesan       = $flash['tipe_pesan'] ?? "ok";
+$reg_username_old = $flash['reg_username_old'] ?? "";
 $hasil_registrasi = $flash['hasil_registrasi'] ?? null;
 $hasil_login      = $flash['hasil_login'] ?? null;
 $selected_uname   = $flash['selected_user'] ?? null;
@@ -299,7 +330,14 @@ if ($koneksi_db) {
 
     <!-- Notifikasi Aksi -->
     <?php if ($pesan_aksi !== ""): ?>
-        <div class="alert <?= $tipe_pesan === 'ok' ? 'alert-ok' : 'alert-warn'; ?>">
+        <?php
+            $alert_class = match ($tipe_pesan) {
+                'ok'  => 'alert-ok',
+                'err' => 'alert-err',
+                default => 'alert-warn'
+            };
+        ?>
+        <div class="alert <?= $alert_class; ?>">
             <?= $pesan_aksi; ?>
         </div>
     <?php endif; ?>
@@ -321,7 +359,7 @@ if ($koneksi_db) {
                 <input type="hidden" name="aksi" value="registrasi">
 
                 <label for="reg_username">Username Baru <span class="req">*</span></label>
-                <input type="text" id="reg_username" name="reg_username" placeholder="Contoh: budi, andi, siregar..." required>
+                <input type="text" id="reg_username" name="reg_username" maxlength="100" value="<?= htmlspecialchars($reg_username_old, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Contoh: budi, andi, siregar..." required>
 
                 <label for="reg_password">Password <span class="req">*</span></label>
                 <div class="password-wrapper">
@@ -336,9 +374,9 @@ if ($koneksi_db) {
                 </div>
 
                 <label for="reg_custom_salt">
-                    Custom Salt <span class="hint">(Opsional &mdash; kosongkan agar dibuat acak otomatis 16 karakter hex)</span>
+                    Custom Salt <span class="hint">(Opsional, maks. 64 karakter &mdash; kosongkan agar dibuat acak otomatis 16 karakter hex)</span>
                 </label>
-                <input type="text" id="reg_custom_salt" name="reg_custom_salt" placeholder="Otomatis: random 16 karakter hex">
+                <input type="text" id="reg_custom_salt" name="reg_custom_salt" maxlength="64" placeholder="Otomatis: random 16 karakter hex">
 
                 <button type="submit" class="btn btn-blue" <?= !$koneksi_db ? 'disabled' : ''; ?>>
                     Proses &amp; Simpan User ke Database
